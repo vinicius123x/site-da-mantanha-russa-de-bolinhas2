@@ -50,35 +50,23 @@
       cursor: default;
     }
     #results { margin-top: 1.5rem; text-align: center; }
-    .input-names input {
-      margin: 0.2rem;
-      padding: 0.3rem;
-    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
   <h1>🎢 Montanha Russa de Bolinhas</h1>
-
-  <div class="input-names">
-    <input type="text" id="name1" placeholder="Nome competidor 1">
-    <input type="text" id="name2" placeholder="Nome competidor 2">
-    <input type="text" id="name3" placeholder="Nome competidor 3">
-  </div>
-
   <div id="timer">00:00.00</div>
   <div id="instructions">
-    <p>1 ▶ iniciar • 4 ▶ finalizar</p>
+    <p>1 ▶ iniciar</p>
+    <p>2 ▶ tempo 2,5 m • 3 ▶ tempo 7,5 m • 4 ▶ pausa 10 m</p>
   </div>
 
   <div id="chart-container">
-    <canvas id="chart" width="600" height="400"></canvas>
+    <canvas id="chart" width="400" height="300"></canvas>
   </div>
 
   <div class="info" id="avgSpeed"></div>
   <button class="btn" id="nextBtn" disabled>Próximo Teste</button>
-  <button class="btn" id="savePDF" style="display:none">Salvar PDF</button>
   <div id="results"></div>
 
   <script>
@@ -88,7 +76,7 @@
     let startTime = null;
     let timerInterval = null;
     let times = {};
-    const DIST = 9.4;
+    const DIST = 10;
     let trials = [];
     let current = 1;
 
@@ -96,7 +84,7 @@
       const total = Math.floor(ms);
       const m = Math.floor(total / 60000);
       const s = Math.floor((total % 60000) / 1000);
-      const cs = Math.floor((total % 1000) / 10);
+      const cs = Math.floor((total % 1000) / 10); // centésimos
       return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
     }
 
@@ -114,7 +102,7 @@
 
     function initChart(dataset = []) {
       const data = {
-        labels: [0, 2.35, 7.05, 9.4],
+        labels: [0, 2.5, 7.5, 10],
         datasets: dataset
       };
       if (chart) chart.destroy();
@@ -126,7 +114,7 @@
           scales: {
             x: {
               title: { display: true, text: 'Distância (m)' },
-              min: 0, max: 9.4
+              min: 0, max: 10
             },
             y: {
               title: { display: true, text: 'Tempo (s)' },
@@ -138,9 +126,8 @@
     }
 
     function updatePlot() {
-      const name = document.getElementById(`name${current}`).value || `Teste ${current}`;
       const dset = [{
-        label: name,
+        label: `Teste ${current}`,
         data: [0, times.t2, times.t3, times.t4],
         borderColor: ['blue','yellow','red'][current-1] || 'gray',
         backgroundColor: 'transparent',
@@ -159,17 +146,24 @@
         document.getElementById('avgSpeed').textContent = '';
         document.getElementById('nextBtn').disabled = true;
       }
-      if (startTime && e.key === '4') {
-        times.t2 = (performance.now() - startTime) / 1000 * 0.25;
-        times.t3 = (performance.now() - startTime) / 1000 * 0.75;
-        times.t4 = ((performance.now() - startTime) / 1000).toFixed(2);
-        stopTimer();
-        updatePlot();
+      if (startTime) {
+        const nowRel = (performance.now() - startTime) / 1000;
+        if (e.key === '2' && times.t2 === undefined) {
+          times.t2 = nowRel.toFixed(2);
+        }
+        if (e.key === '3' && times.t3 === undefined) {
+          times.t3 = nowRel.toFixed(2);
+        }
+        if (e.key === '4' && times.t4 === undefined) {
+          times.t4 = nowRel.toFixed(2);
+          stopTimer();
+          updatePlot();
+        }
       }
     });
 
     document.getElementById('nextBtn').addEventListener('click', () => {
-      trials.push({ ...times, trial: current, name: document.getElementById(`name${current}`).value });
+      trials.push({ ...times, trial: current });
       if (current < 3) {
         current++;
         startTime = null;
@@ -182,7 +176,7 @@
     function showFinalResults() {
       const colors = ['blue','yellow','red'];
       const dsets = trials.map((t,i)=>({
-        label: t.name || `Teste ${t.trial}`,
+        label: `Teste ${t.trial}`,
         data: [0,t.t2,t.t3,t.t4],
         borderColor: colors[i],
         backgroundColor: 'transparent',
@@ -194,29 +188,12 @@
       const sortedVel = [...trials].sort((a,b)=> (DIST/b.t4) - (DIST/a.t4));
 
       let html = '<h2>🏁 Resultados Finais</h2>';
-      html += '<h3>Menores Tempos</h3><ol>' + sortedTime.map(t=>`<li>${t.name || 'Teste '+t.trial}: ${t.t4}s</li>`).join('') + '</ol>';
-      html += '<h3>Maiores Velocidades</h3><ol>' + sortedVel.map(t=>`<li>${t.name || 'Teste '+t.trial}: ${(DIST/t.t4).toFixed(2)} m/s</li>`).join('') + '</ol>';
+      html += '<h3>Menores Tempos</h3><ol>' + sortedTime.map(t=>`<li>Teste ${t.trial}: ${t.t4}s</li>`).join('') + '</ol>';
+      html += '<h3>Maiores Velocidades</h3><ol>' + sortedVel.map(t=>`<li>Teste ${t.trial}: ${(DIST/t.t4).toFixed(2)} m/s</li>`).join('') + '</ol>';
 
       document.getElementById('results').innerHTML = html;
       document.getElementById('nextBtn').disabled = true;
-      document.getElementById('savePDF').style.display = 'inline-block';
     }
-
-    document.getElementById('savePDF').addEventListener('click', () => {
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF();
-
-      pdf.text("Montanha Russa de Bolinhas - Resultados", 10, 10);
-      trials.forEach((t, i) => {
-        pdf.text(`${t.name || 'Teste '+t.trial}: t4=${t.t4}s, Veloc. média=${(DIST/t.t4).toFixed(2)}m/s`, 10, 20 + i * 10);
-      });
-
-      const canvas = document.getElementById("chart");
-      const imgData = canvas.toDataURL("image/png", 1.0);
-      pdf.addImage(imgData, 'PNG', 10, 50, 180, 120);
-
-      pdf.save("resultados_montanha_russa.pdf");
-    });
 
     initChart();
   </script>
